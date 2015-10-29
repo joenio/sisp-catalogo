@@ -1,0 +1,61 @@
+#!/usr/bin/env perl
+use open ':locale';
+use Modern::Perl;
+use WWW::Mechanize;
+use Mojo::DOM;
+use YAML::Tiny;
+
+our $VERSION = '0.01';
+
+my $mech = WWW::Mechanize->new(
+  agent => "$0/$VERSION",
+  autocheck => 0,
+  stack_depth => 50,
+);
+
+my $URL = 'http://sisp.gov.br/catalogo/software-list';
+
+say "request: $URL";
+$mech->get($URL);
+unless ($mech->success) {
+  warn "E: request status ", $mech->status;
+}
+
+my %links = map {
+  my %p = $_->URI->query_form;
+  $p{software_id} => $_;
+} $mech->find_all_links(url_regex => qr/^one\?software_id=\d+$/);
+
+my %softwares = ();
+for my $link (values %links) {
+  say "I: request: ", $link->url;
+  $mech->get($link);
+  unless ($mech->success) {
+    warn "E: request status ", $mech->status;
+  }
+  my %params = $mech->uri->query_form;
+  my $software_id = $params{software_id};
+  $softwares{$software_id}{url} = $mech->uri->as_string;
+  $softwares{$software_id}{software_id} = $software_id;
+  $mech->save_content("cache/$software_id.html");
+  my $content = $mech->content;
+  my $stop = 0;
+  do {
+    $stop++;
+    my $next = $stop + 1;
+    if ($content =~ m/<input type="hidden" name="stop$stop"\s*>(.+?)(?:(?:<input type="hidden" name="stop$next"\s*>)|(?:<div id="footer">))/si) {
+      my $dom = Mojo::DOM->new($1);
+      if (my $section = $dom->at('h3.division')) {
+        $section = $section->text;
+        for my $item ($dom->find('div.form-item-wrapper')->each) {
+          my $field = $item->at('span.form-label')->text;
+          my $value = $item->at('span.form-widget')->text;
+          $softwares{$software_id}{software_info}{$section}{$field} = $value;
+        }
+      }
+    }
+  } while $stop < 20;
+}
+
+my $yaml = YAML::Tiny->new(\%softwares);
+$yaml->write("$0.yml");

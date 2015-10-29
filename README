@@ -1,0 +1,9 @@
+Script para extração do catálogo de softwares SISP em formato YAML
+
+Requisitos para execução do script em sistemas Debian:
+
+apt-get install libmodern-perl-perl libwww-mechanize-perl libmojolicious-perl libyaml-tiny-perl
+
+Este repositório já inclui uma versão do YML com os dados do catálogo SISP:
+
+* http://sisp.gov.br/catalogo/software-list
